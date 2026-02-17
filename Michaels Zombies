@@ -13,37 +13,27 @@
 
 local SCRIPT_URL = "https://raw.githubusercontent.com/SeanyBoii2/Game-Scripts/refs/heads/main/Michaels%20Zombies"
 
---══════════════════════════════════════════════════════════════
---  GAME ID LOCK
---══════════════════════════════════════════════════════════════
-
-local REQUIRED_GAME_ID = 8054462345
--- Check BOTH PlaceId AND GameId so sub-places within the universe also work
--- PlaceId = the specific place you're in (changes per sub-place)
--- GameId  = the universe/game ID (same for ALL places in the game)
-if game.PlaceId ~= REQUIRED_GAME_ID and game.GameId ~= REQUIRED_GAME_ID then
-    -- Silent exit — wrong game
-    warn("[Michael's Zombies Hub] Wrong game. This script only works in game ID " .. REQUIRED_GAME_ID)
-    return
-end
-
 local queueteleport = queue_on_teleport
     or (syn and syn.queue_on_teleport)
     or (fluxus and fluxus.queue_on_teleport)
 
---══════════════════════════════════════════════════════════════
---  LOAD LIBRARY
---══════════════════════════════════════════════════════════════
+-- Auto-requeue on ANY teleport
+if queueteleport then
+    pcall(function()
+        queueteleport('loadstring(game:HttpGet("' .. SCRIPT_URL .. '"))()')
+    end)
+end
 
+-- LOAD LIBRARY
 local Library
 pcall(function()
-    Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/SeanyBoii2/Z/refs/heads/main/SPOOKALICIOUS%20V4%20API/SpookaliciousV4.lua"))()
+    Library = loadstring(game:HttpGet("..."))()
 end)
 
 if not Library then
     task.wait(0.5)
     pcall(function()
-        Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/SeanyBoii2/Z/refs/heads/main/SPOOKALICIOUS%20V4%20API/SpookaliciousV4.lua"))()
+        Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/SeanyBoii2/Z/refs/heads/main/SPOOKALICIOUS%20V4%20API/SpookaliciousV4.lua?v=2"))()
     end)
 end
 
@@ -940,7 +930,7 @@ local function startFly()
     flyBodyVel = Instance.new("BodyVelocity")
     flyBodyVel.Name      = "SpookyFlyVel"
     flyBodyVel.MaxForce  = Vector3.new(9e9, 9e9, 9e9)
-    flyBodyVel.Velocity  = Vector3.new(0, 0.1, 0)
+    flyBodyVel.Velocity  = Vector3.new(0, 0, 0)
     flyBodyVel.Parent    = hrp
 
     hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
@@ -996,7 +986,7 @@ RunService.Heartbeat:Connect(function()
     if flyKeysDown[Enum.KeyCode.Space]     then moveDir = moveDir + Vector3.new(0, 1, 0) end
     if flyKeysDown[Enum.KeyCode.LeftShift] then moveDir = moveDir - Vector3.new(0, 1, 0) end
 
-    flyBodyVel.Velocity  = moveDir.Magnitude > 0 and moveDir.Unit * flySpeed or Vector3.new(0, 0.1, 0)
+    flyBodyVel.Velocity  = moveDir.Magnitude > 0 and moveDir.Unit * flySpeed or Vector3.new(0, 0, 0)
     flyBodyGyro.CFrame   = camCF
 
     local hum = char:FindFirstChild("Humanoid")
@@ -1245,7 +1235,7 @@ FlySection:CreateSlider("Fly Speed", { Min = 20, Max = 400, DefaultValue = 80, S
     flySpeed = val
 end)
 
-FlySection:CreateKeybind("Fly Toggle Keybind", { Default = nil }, function()
+FlySection:CreateKeybind("Fly Toggle Keybind", { Default = Enum.KeyCode.T }, function()
     flyEnabled = not flyEnabled
     if flyEnabled then startFly() else stopFly() end
     notify("Fly: " .. (flyEnabled and "ON" or "OFF"))
