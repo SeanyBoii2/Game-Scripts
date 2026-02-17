@@ -916,7 +916,7 @@ player.CharacterAdded:Connect(function()
 end)
 
 --══════════════════════════════════════════════════════════════
---  PAGE: MODS
+--  PAGE: MODS  (essentials only)
 --══════════════════════════════════════════════════════════════
 
 local ModsPage = Window:CreatePage("Mods")
@@ -941,6 +941,7 @@ local killToggle = ZombieSection:CreateToggle("Kill Zombies (heads to cursor)", 
     else stopMod("KillZombies"); notify("Kill Zombies OFF") end
 end)
 registerFunctionalToggle(killToggle, false)
+ZombieSection:CreateDivider()
 
 local HBSection = ModsPage:CreateSection("Hitbox Expander")
 local hitboxToggle = HBSection:CreateToggle("Enable Hitbox Expander", { Toggled = false }, function(val)
@@ -949,26 +950,9 @@ local hitboxToggle = HBSection:CreateToggle("Enable Hitbox Expander", { Toggled 
     notify("Hitbox Expander: " .. (val and "ON" or "OFF"))
 end)
 registerFunctionalToggle(hitboxToggle, false)
-
-HBSection:CreateSlider("Hitbox Size",        { Min = 1,  Max = 50,  DefaultValue = 8,   Step = 1  }, function(val) HitboxSettings.HitboxSize = val; restoreAllHitboxes() end)
-HBSection:CreateSlider("Detection Radius",   { Min = 50, Max = 500, DefaultValue = 150, Step = 10 }, function(val) HitboxSettings.Radius = val end)
-HBSection:CreateSlider("Transparency",       { Min = 0,  Max = 100, DefaultValue = 99,  Step = 1  }, function(val) HitboxSettings.Transparency = val / 100; restoreAllHitboxes() end)
-
-HBSection:CreateDropdown("Target Mode", { List = { "NPCs", "Players", "Both" }, Default = "NPCs" }, function(val)
-    HitboxSettings.TargetMode = val; restoreAllHitboxes(); notify("Hitbox Target: " .. val)
+HBSection:CreateSlider("Hitbox Size", { Min = 1, Max = 50, DefaultValue = 8, Step = 1 }, function(val)
+    HitboxSettings.HitboxSize = val; restoreAllHitboxes()
 end)
-
-HBSection:CreateTextbox("Hitbox Part Name", "Head", function(text)
-    if text and #text > 0 then HitboxSettings.HitboxPartName = text; restoreAllHitboxes(); notify("Hitbox Part: " .. text) end
-end)
-
-HBSection:CreateToggle("Lock Z-Axis to 1",         { Toggled = false }, function(val) HitboxSettings.LockZAxis = val; restoreAllHitboxes(); notify("Z-Axis Lock: " .. (val and "ON" or "OFF")) end)
-HBSection:CreateToggle("Apply Transparency",        { Toggled = true  }, function(val) HitboxSettings.ApplyTransparency = val; restoreAllHitboxes() end)
-HBSection:CreateToggle("Apply Material",            { Toggled = true  }, function(val) HitboxSettings.ApplyMaterial = val; restoreAllHitboxes() end)
-HBSection:CreateToggle("Apply Color",               { Toggled = true  }, function(val) HitboxSettings.ApplyColor = val; restoreAllHitboxes() end)
-HBSection:CreateToggle("Apply CanCollide = False",  { Toggled = true  }, function(val) HitboxSettings.ApplyCanCollide = val; restoreAllHitboxes() end)
-HBSection:CreateToggle("Apply Massless = True",     { Toggled = true  }, function(val) HitboxSettings.ApplyMassless = val; restoreAllHitboxes() end)
-HBSection:CreateButton("Reset All Hitboxes", function() restoreAllHitboxes(); notify("All hitboxes restored!") end)
 HBSection:CreateDivider()
 
 local TBSection = ModsPage:CreateSection("TriggerBot")
@@ -976,19 +960,10 @@ local triggerToggle = TBSection:CreateToggle("Enable TriggerBot", { Toggled = fa
     triggerBotEnabled = val; notify("TriggerBot: " .. (val and "ON" or "OFF"))
 end)
 registerFunctionalToggle(triggerToggle, false)
-
-TBSection:CreateToggle("Hold Right-Click Mode", { Toggled = true  }, function(val) triggerConfig.HoldClick = val; notify("Hold Click: " .. (val and "ON" or "OFF")) end)
-TBSection:CreateToggle("Aggressive Mode",       { Toggled = false }, function(val) triggerConfig.AggressiveMode = val; notify("Aggressive Mode: " .. (val and "ON - shoots everything!" or "OFF")) end)
-TBSection:CreateSlider("Click Delay (ms)",              { Min = 0, Max = 100, DefaultValue = 0,   Step = 1  }, function(val) clickDelay = val / 1000 end)
-TBSection:CreateSlider("Max Distance (0 = unlimited)", { Min = 0, Max = 500, DefaultValue = 0,   Step = 10 }, function(val)
-    triggerConfig.MaxDistance = val == 0 and nil or val
-    notify(val == 0 and "Distance: Unlimited" or ("Distance: " .. val .. " studs"))
+TBSection:CreateToggle("Hold Right-Click Mode", { Toggled = true }, function(val)
+    triggerConfig.HoldClick = val; notify("Hold Click: " .. (val and "ON" or "OFF"))
 end)
-TBSection:CreateSlider("Exclusion Radius", { Min = 3, Max = 20, DefaultValue = 5, Step = 1 }, function(val) triggerConfig.ExclusionRadius = val end)
-TBSection:CreateDropdown("Team Exclusion Mode", { List = { "folder", "team", "players", "none" }, Default = "folder" }, function(val)
-    triggerConfig.TeamExclusionMode = val; notify("Exclusion: " .. val)
-end)
-TBSection:CreateDivider()
+TBSection:CreateLabel("For advanced settings see the Advanced page")
 
 --══════════════════════════════════════════════════════════════
 --  PAGE: VISUALS (ESP)
@@ -1141,6 +1116,44 @@ local noclipToggle = NoclipSection:CreateToggle("Noclip", { Toggled = false }, f
     noclipEnabled = val; notify("Noclip: " .. (val and "ON" or "OFF"))
 end)
 registerFunctionalToggle(noclipToggle, false)
+
+--══════════════════════════════════════════════════════════════
+--  PAGE: ADVANCED  (hitbox + triggerbot fine-tuning)
+--══════════════════════════════════════════════════════════════
+
+local AdvPage = Window:CreatePage("Advanced")
+
+local AdvHBSection = AdvPage:CreateSection("Hitbox Expander")
+AdvHBSection:CreateSlider("Detection Radius",   { Min = 50, Max = 500, DefaultValue = 150, Step = 10 }, function(val) HitboxSettings.Radius = val end)
+AdvHBSection:CreateSlider("Transparency",       { Min = 0,  Max = 100, DefaultValue = 99,  Step = 1  }, function(val) HitboxSettings.Transparency = val / 100; restoreAllHitboxes() end)
+AdvHBSection:CreateDropdown("Target Mode",      { List = { "NPCs", "Players", "Both" }, Default = "NPCs" }, function(val)
+    HitboxSettings.TargetMode = val; restoreAllHitboxes(); notify("Hitbox Target: " .. val)
+end)
+AdvHBSection:CreateTextbox("Hitbox Part Name", "Head", function(text)
+    if text and #text > 0 then HitboxSettings.HitboxPartName = text; restoreAllHitboxes(); notify("Hitbox Part: " .. text) end
+end)
+AdvHBSection:CreateToggle("Lock Z-Axis to 1",        { Toggled = false }, function(val) HitboxSettings.LockZAxis = val; restoreAllHitboxes(); notify("Z-Axis Lock: " .. (val and "ON" or "OFF")) end)
+AdvHBSection:CreateToggle("Apply Transparency",       { Toggled = true  }, function(val) HitboxSettings.ApplyTransparency = val; restoreAllHitboxes() end)
+AdvHBSection:CreateToggle("Apply Material",           { Toggled = true  }, function(val) HitboxSettings.ApplyMaterial = val; restoreAllHitboxes() end)
+AdvHBSection:CreateToggle("Apply Color",              { Toggled = true  }, function(val) HitboxSettings.ApplyColor = val; restoreAllHitboxes() end)
+AdvHBSection:CreateToggle("Apply CanCollide = False", { Toggled = true  }, function(val) HitboxSettings.ApplyCanCollide = val; restoreAllHitboxes() end)
+AdvHBSection:CreateToggle("Apply Massless = True",    { Toggled = true  }, function(val) HitboxSettings.ApplyMassless = val; restoreAllHitboxes() end)
+AdvHBSection:CreateButton("Reset All Hitboxes", function() restoreAllHitboxes(); notify("All hitboxes restored!") end)
+AdvHBSection:CreateDivider()
+
+local AdvTBSection = AdvPage:CreateSection("TriggerBot")
+AdvTBSection:CreateToggle("Aggressive Mode", { Toggled = false }, function(val)
+    triggerConfig.AggressiveMode = val; notify("Aggressive Mode: " .. (val and "ON - shoots everything!" or "OFF"))
+end)
+AdvTBSection:CreateSlider("Click Delay (ms)",           { Min = 0, Max = 100, DefaultValue = 0,   Step = 1  }, function(val) clickDelay = val / 1000 end)
+AdvTBSection:CreateSlider("Max Distance (0=unlimited)", { Min = 0, Max = 500, DefaultValue = 0,   Step = 10 }, function(val)
+    triggerConfig.MaxDistance = val == 0 and nil or val
+    notify(val == 0 and "Distance: Unlimited" or ("Distance: " .. val .. " studs"))
+end)
+AdvTBSection:CreateSlider("Exclusion Radius", { Min = 3, Max = 20, DefaultValue = 5, Step = 1 }, function(val) triggerConfig.ExclusionRadius = val end)
+AdvTBSection:CreateDropdown("Team Exclusion Mode", { List = { "folder", "team", "players", "none" }, Default = "players" }, function(val)
+    triggerConfig.TeamExclusionMode = val; notify("Exclusion: " .. val)
+end)
 
 --══════════════════════════════════════════════════════════════
 --  DIVIDER — game pages / utility pages
