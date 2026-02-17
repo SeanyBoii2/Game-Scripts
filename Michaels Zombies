@@ -18,7 +18,10 @@ local SCRIPT_URL = "https://raw.githubusercontent.com/SeanyBoii2/Game-Scripts/re
 --══════════════════════════════════════════════════════════════
 
 local REQUIRED_GAME_ID = 8054462345
-if game.PlaceId ~= REQUIRED_GAME_ID then
+-- Check BOTH PlaceId AND GameId so sub-places within the universe also work
+-- PlaceId = the specific place you're in (changes per sub-place)
+-- GameId  = the universe/game ID (same for ALL places in the game)
+if game.PlaceId ~= REQUIRED_GAME_ID and game.GameId ~= REQUIRED_GAME_ID then
     -- Silent exit — wrong game
     warn("[Michael's Zombies Hub] Wrong game. This script only works in game ID " .. REQUIRED_GAME_ID)
     return
@@ -782,7 +785,6 @@ end
 --  MODS — LOOP FUNCTIONS
 --══════════════════════════════════════════════════════════════
 
--- Powerups: drag all powerups onto the player each frame
 local function loopPowerups()
     local hrp = getHRP()
     if not hrp then return end
@@ -799,7 +801,6 @@ local function loopPowerups()
     end
 end
 
--- Freeze Zombies: anchor all zombie parts every frame
 local function loopFreezeZombies()
     local ig = Workspace:FindFirstChild("Ignore")
     local folder = ig and ig:FindFirstChild("Zombies")
@@ -815,7 +816,6 @@ local function loopFreezeZombies()
     end
 end
 
--- Freeze Zombies cleanup: unanchor everything on disable
 local function cleanupFreezeZombies()
     local ig = Workspace:FindFirstChild("Ignore")
     local folder = ig and ig:FindFirstChild("Zombies")
@@ -831,8 +831,7 @@ local function cleanupFreezeZombies()
     end
 end
 
--- Kill Zombies: CFrame every zombie head 5 studs along mouse ray, non-collidable
-local killZombieData = {}  -- [zombie] = { head, anchoredParts, origCollide }
+local killZombieData = {}
 
 local function loopKillZombies()
     local char = player.Character
@@ -979,7 +978,6 @@ UIS.InputEnded:Connect(function(input, _)
     if flyKeySet[input.KeyCode] then flyKeysDown[input.KeyCode] = false end
 end)
 
--- Fly heartbeat
 RunService.Heartbeat:Connect(function()
     if not flyEnabled then return end
     local char = player.Character
@@ -1007,7 +1005,6 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- Noclip stepped loop
 RunService.Stepped:Connect(function()
     if noclipEnabled and player.Character then
         for _, part in ipairs(player.Character:GetDescendants()) do
@@ -1016,14 +1013,12 @@ RunService.Stepped:Connect(function()
     end
 end)
 
--- Infinite jump
 UIS.JumpRequest:Connect(function()
     if infJumpEnabled and player.Character and player.Character:FindFirstChild("Humanoid") then
         player.Character.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
     end
 end)
 
--- Re-init fly on character respawn
 player.CharacterAdded:Connect(function()
     flyBodyVel  = nil
     flyBodyGyro = nil
@@ -1057,7 +1052,6 @@ end
 
 local ModsPage = Window:CreatePage("Mods")
 
--- Powerups
 local PowerSection = ModsPage:CreateSection("Powerups")
 
 local powerupsToggle = PowerSection:CreateToggle("Powerups", { Toggled = false }, function(val)
@@ -1073,7 +1067,6 @@ registerFunctionalToggle(powerupsToggle, false)
 
 PowerSection:CreateDivider()
 
--- Zombies
 local ZombieSection = ModsPage:CreateSection("Zombies")
 
 local freezeToggle = ZombieSection:CreateToggle("Freeze Zombies", { Toggled = false }, function(val)
@@ -1098,7 +1091,6 @@ local killToggle = ZombieSection:CreateToggle("Kill Zombies (heads to cursor)", 
 end)
 registerFunctionalToggle(killToggle, false)
 
--- Hitbox Expander
 local HBSection = ModsPage:CreateSection("Hitbox Expander")
 
 local hitboxToggle = HBSection:CreateToggle("Enable Hitbox Expander", { Toggled = false }, function(val)
@@ -1172,7 +1164,6 @@ end)
 
 HBSection:CreateDivider()
 
--- TriggerBot
 local TBSection = ModsPage:CreateSection("TriggerBot")
 
 local triggerToggle = TBSection:CreateToggle("Enable TriggerBot", { Toggled = false }, function(val)
@@ -1220,7 +1211,6 @@ TBSection:CreateDivider()
 
 local MovementPage = Window:CreatePage("Movement")
 
--- Speed
 local SpeedSection = MovementPage:CreateSection("Speed")
 SpeedSection:CreateLabel("Override your character's walk speed")
 
@@ -1241,7 +1231,6 @@ registerFunctionalToggle(speedToggle, false)
 
 SpeedSection:CreateDivider()
 
--- Fly
 local FlySection = MovementPage:CreateSection("Fly")
 FlySection:CreateLabel("WASD to move, Space to go up, Shift to go down")
 
@@ -1264,7 +1253,6 @@ end)
 
 FlySection:CreateDivider()
 
--- Jump
 local JumpSection = MovementPage:CreateSection("Jump")
 
 JumpSection:CreateSlider("Jump Power", { Min = 50, Max = 500, DefaultValue = 50, Step = 5 }, function(val)
@@ -1281,7 +1269,6 @@ registerFunctionalToggle(infJumpToggle, false)
 
 JumpSection:CreateDivider()
 
--- Noclip
 local NoclipSection = MovementPage:CreateSection("Noclip")
 NoclipSection:CreateLabel("Walk through walls and geometry")
 
@@ -1297,7 +1284,6 @@ registerFunctionalToggle(noclipToggle, false)
 
 local TpPage = Window:CreatePage("Teleports")
 
--- Mystery Box
 do
     local section = TpPage:CreateSection("Mystery Box")
     section:CreateLabel("Teleport to the Mystery Box location")
@@ -1314,7 +1300,6 @@ do
     section:CreateDivider()
 end
 
--- Helper: build a TP section with dropdown + refresh + TP button
 local function buildTpSection(sectionName, description, folderFn, targetFn)
     local section = TpPage:CreateSection(sectionName)
     section:CreateLabel(description)
@@ -1369,7 +1354,6 @@ buildTpSection("Perk Machines", "Select a perk machine and teleport to it",     
 end)
 buildTpSection("Parts",         "Select a part and teleport to it",              function() return Workspace:FindFirstChild("_Parts")        end, nil)
 
--- Players section (special case — uses Players service)
 do
     local section = TpPage:CreateSection("Players")
     section:CreateLabel("Select a player and teleport to them")
@@ -1414,6 +1398,13 @@ do
 
     section:CreateDivider()
 end
+
+--══════════════════════════════════════════════════════════════
+--  ▼▼▼ DIVIDER: Separates game pages from utility pages ▼▼▼
+--══════════════════════════════════════════════════════════════
+
+Window:CreateHomeDivider()
+Window:CreateHomeSection("Utilities")
 
 --══════════════════════════════════════════════════════════════
 --  PAGE: SERVER
@@ -1487,7 +1478,6 @@ end)
 
 ServerSection:CreateDivider()
 
--- Server Saver
 local FILE_NAME = "SavedServers_MichaelsZombies.json"
 
 local function saveServerData(data)
@@ -1605,7 +1595,7 @@ end)
 UtilSection:CreateDivider()
 
 local InfoSection = MiscPage:CreateSection("Information")
-InfoSection:CreateLabel("Script: Michael's Zombies Hub V1.0")
+InfoSection:CreateLabel("Script: Michael's Zombies")
 InfoSection:CreateLabel("Discord: spookyie")
 InfoSection:CreateDivider()
 
@@ -1614,11 +1604,9 @@ InfoSection:CreateButton("Credits", function()
 end)
 
 InfoSection:CreateButton("Destroy GUI", function()
-    -- Stop all mods cleanly
     stopMod("Powerups")
     stopMod("FreezeZombies")
     stopMod("KillZombies")
-    -- Disable all ESP
     for _, cat in ipairs(CATEGORIES) do
         espEnabled[cat.key] = false
         pcall(function() disableCategory(cat.key) end)
@@ -1703,7 +1691,6 @@ else
     Window:SaveConfig("Default")
 end
 
--- Always force movement features OFF on startup for safety
 resetFunctionalToggles()
 speedEnabled   = false
 flyEnabled     = false
