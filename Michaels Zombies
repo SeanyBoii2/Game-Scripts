@@ -1,1 +1,1037 @@
+--[[
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                                                                              ║
+║               MICHAEL'S ZOMBIES HUB                                          ║
+║               Built on Spookalicious V4 API                                  ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+--]]
 
+--══════════════════════════════════════════════════════════════
+--  AUTO-RELOAD SETUP
+--══════════════════════════════════════════════════════════════
+
+local SCRIPT_URL = "https://raw.githubusercontent.com/SeanyBoii2/Game-Scripts/refs/heads/main/Michaels%20Zombies"
+
+local queueteleport = queue_on_teleport
+    or (syn and syn.queue_on_teleport)
+    or (fluxus and fluxus.queue_on_teleport)
+
+--══════════════════════════════════════════════════════════════
+--  LOAD LIBRARY
+--══════════════════════════════════════════════════════════════
+
+local Library
+pcall(function()
+    Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/SeanyBoii2/Z/refs/heads/main/SPOOKALICIOUS%20V4%20API/SpookaliciousV4.lua"))()
+end)
+
+if not Library then
+    task.wait(0.5)
+    pcall(function()
+        Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/SeanyBoii2/Z/refs/heads/main/SPOOKALICIOUS%20V4%20API/SpookaliciousV4.lua"))()
+    end)
+end
+
+--══════════════════════════════════════════════════════════════
+--  CREATE WINDOW
+--══════════════════════════════════════════════════════════════
+
+local Window
+pcall(function()
+    Window = Library:CreateWindow("Michael's Zombies", "V1.0")
+end)
+
+--══════════════════════════════════════════════════════════════
+--  SERVICES
+--══════════════════════════════════════════════════════════════
+
+local Players        = game:GetService("Players")
+local RunService     = game:GetService("RunService")
+local StarterGui     = game:GetService("StarterGui")
+local TeleportService = game:GetService("TeleportService")
+local VirtualUser    = game:GetService("VirtualUser")
+local HttpService    = game:GetService("HttpService")
+local Workspace      = game:GetService("Workspace")
+
+local player = Players.LocalPlayer
+local mouse  = player:GetMouse()
+local _hasFS = (typeof(writefile) == "function" and typeof(readfile) == "function")
+
+--══════════════════════════════════════════════════════════════
+--  HELPERS
+--══════════════════════════════════════════════════════════════
+
+local function notify(msg)
+    pcall(function() Window:Notify(msg) end)
+end
+
+-- Functional toggles reset to their default after config load
+-- (prevents mods from auto-running on config load)
+local functionalToggles = {}
+
+local function registerFunctionalToggle(toggle, default)
+    table.insert(functionalToggles, { ref = toggle, default = default or false })
+end
+
+local function resetFunctionalToggles()
+    for _, item in ipairs(functionalToggles) do
+        item.ref:Set(item.default)
+    end
+end
+
+--══════════════════════════════════════════════════════════════
+--  ESP CONSTANTS
+--══════════════════════════════════════════════════════════════
+
+local ESP_COLORS = {
+    MysteryBox   = Color3.fromRGB(0,   180, 255),
+    Zombies      = Color3.fromRGB(255,  50,  50),
+    Powerups     = Color3.fromRGB(255, 220,   0),
+    Parts        = Color3.fromRGB(180, 100, 255),
+    WallBuys     = Color3.fromRGB(255, 140,   0),
+    PerkMachines = Color3.fromRGB(0,   255, 144),
+    Players      = Color3.fromRGB(100, 200, 255),
+}
+
+local CATEGORIES = {
+    { key = "MysteryBox",   label = "Mystery Box"   },
+    { key = "Zombies",      label = "Zombies"        },
+    { key = "Powerups",     label = "Powerups"       },
+    { key = "Parts",        label = "Parts"          },
+    { key = "WallBuys",     label = "Wall Buys"      },
+    { key = "PerkMachines", label = "Perk Machines"  },
+    { key = "Players",      label = "Players"        },
+}
+
+--══════════════════════════════════════════════════════════════
+--  ESP STATE
+--══════════════════════════════════════════════════════════════
+
+local espEnabled = {
+    MysteryBox   = false,
+    Zombies      = false,
+    Powerups     = false,
+    Parts        = false,
+    WallBuys     = false,
+    PerkMachines = false,
+    Players      = false,
+}
+
+local espObjects = {}  -- [instance] = { highlight, billboard }
+local scanConns  = {}  -- [category] = { add, rem, folderWatch }
+
+--══════════════════════════════════════════════════════════════
+--  ESP — GET FOLDER
+--══════════════════════════════════════════════════════════════
+
+local function getFolder(category)
+    if category == "MysteryBox" then
+        local mc = Workspace:FindFirstChild("_MapComponents")
+        return mc and mc:FindFirstChild("MysteryBox")
+    elseif category == "Zombies" then
+        local ig = Workspace:FindFirstChild("Ignore")
+        return ig and ig:FindFirstChild("Zombies")
+    elseif category == "Powerups" then
+        local ig = Workspace:FindFirstChild("Ignore")
+        return ig and ig:FindFirstChild("_Powerups")
+    elseif category == "Parts" then
+        return Workspace:FindFirstChild("_Parts")
+    elseif category == "WallBuys" then
+        return Workspace:FindFirstChild("_WallBuys")
+    elseif category == "PerkMachines" then
+        return Workspace:FindFirstChild("_PerkMachines")
+    elseif category == "Players" then
+        return Players
+    end
+    return nil
+end
+
+--══════════════════════════════════════════════════════════════
+--  ESP — ADD / REMOVE
+--══════════════════════════════════════════════════════════════
+
+local function removeESP(instance)
+    local data = espObjects[instance]
+    if not data then return end
+    pcall(function() data.highlight:Destroy() end)
+    pcall(function() data.billboard:Destroy() end)
+    espObjects[instance] = nil
+end
+
+local function addESP(instance, category)
+    if espObjects[instance] then return end
+    if not instance or not instance.Parent then return end
+
+    local root
+    if instance:IsA("Model") then
+        root = instance.PrimaryPart or instance:FindFirstChildWhichIsA("BasePart")
+    elseif instance:IsA("BasePart") then
+        root = instance
+    else
+        root = instance:FindFirstChildWhichIsA("BasePart")
+    end
+    if not root then return end
+
+    local color = ESP_COLORS[category] or Color3.new(1, 1, 1)
+
+    local hl = Instance.new("Highlight")
+    hl.Adornee             = instance
+    hl.FillColor           = color
+    hl.OutlineColor        = color
+    hl.FillTransparency    = 0.72
+    hl.OutlineTransparency = 0.15
+    hl.DepthMode           = Enum.HighlightDepthMode.AlwaysOnTop
+    hl.Parent              = Workspace
+
+    local bb = Instance.new("BillboardGui")
+    bb.Adornee          = root
+    bb.Size             = UDim2.new(0, 90, 0, 18)
+    bb.StudsOffset      = Vector3.new(0, 3, 0)
+    bb.AlwaysOnTop      = true
+    bb.ResetOnSpawn     = false
+    bb.ClipsDescendants = false
+    bb.Parent           = Workspace
+
+    local lbl = Instance.new("TextLabel")
+    lbl.Size                   = UDim2.new(1, 0, 1, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text                   = instance.Name
+    lbl.TextColor3             = color
+    lbl.TextStrokeColor3       = Color3.new(0, 0, 0)
+    lbl.TextStrokeTransparency = 0.25
+    lbl.Font                   = Enum.Font.Gotham
+    lbl.TextSize               = 10
+    lbl.TextTruncate           = Enum.TextTruncate.AtEnd
+    lbl.Parent                 = bb
+
+    espObjects[instance] = { highlight = hl, billboard = bb }
+
+    instance.AncestryChanged:Connect(function()
+        if not instance.Parent then removeESP(instance) end
+    end)
+end
+
+--══════════════════════════════════════════════════════════════
+--  ESP — ENABLE / DISABLE CATEGORY
+--══════════════════════════════════════════════════════════════
+
+local function enableCategory(category)
+    if scanConns[category] then return end
+
+    local folder = getFolder(category)
+
+    local function wireFolder(f)
+        -- Mystery Box: highlight the whole folder model directly
+        if category == "MysteryBox" then
+            if espObjects[f] then return end
+            local color = ESP_COLORS.MysteryBox
+
+            local hl = Instance.new("Highlight")
+            hl.Adornee             = f
+            hl.FillColor           = color
+            hl.OutlineColor        = color
+            hl.FillTransparency    = 0.72
+            hl.OutlineTransparency = 0.15
+            hl.DepthMode           = Enum.HighlightDepthMode.AlwaysOnTop
+            hl.Parent              = Workspace
+
+            local rootPart = nil
+            for _, v in ipairs(f:GetDescendants()) do
+                if v:IsA("BasePart") then rootPart = v; break end
+            end
+            if not rootPart and f:IsA("BasePart") then rootPart = f end
+
+            local bb = Instance.new("BillboardGui")
+            bb.Adornee      = rootPart or f
+            bb.Size         = UDim2.new(0, 90, 0, 18)
+            bb.StudsOffset  = Vector3.new(0, 3, 0)
+            bb.AlwaysOnTop  = true
+            bb.ResetOnSpawn = false
+            bb.Parent       = Workspace
+
+            local lbl2 = Instance.new("TextLabel")
+            lbl2.Size                   = UDim2.new(1, 0, 1, 0)
+            lbl2.BackgroundTransparency = 1
+            lbl2.Text                   = "Mystery Box"
+            lbl2.TextColor3             = color
+            lbl2.TextStrokeColor3       = Color3.new(0, 0, 0)
+            lbl2.TextStrokeTransparency = 0.25
+            lbl2.Font                   = Enum.Font.Gotham
+            lbl2.TextSize               = 10
+            lbl2.Parent                 = bb
+
+            espObjects[f] = { highlight = hl, billboard = bb }
+
+            local remConn = f.AncestryChanged:Connect(function()
+                if not f.Parent then removeESP(f) end
+            end)
+            scanConns[category] = { rem = remConn }
+            return
+        end
+
+        -- Players: ESP their character models
+        if category == "Players" then
+            for _, plr in ipairs(f:GetPlayers()) do
+                if plr ~= player and espEnabled[category] then
+                    if plr.Character then addESP(plr.Character, category) end
+                end
+            end
+
+            local addConn = f.PlayerAdded:Connect(function(plr)
+                if plr ~= player and espEnabled[category] then
+                    local function onChar(char)
+                        if espEnabled[category] then
+                            task.defer(function() addESP(char, category) end)
+                        end
+                    end
+                    if plr.Character then onChar(plr.Character) end
+                    plr.CharacterAdded:Connect(onChar)
+                end
+            end)
+
+            local remConn = f.PlayerRemoving:Connect(function(plr)
+                if plr.Character then removeESP(plr.Character) end
+            end)
+
+            for _, plr in ipairs(f:GetPlayers()) do
+                if plr ~= player then
+                    plr.CharacterAdded:Connect(function(char)
+                        if espEnabled[category] then
+                            task.defer(function() addESP(char, category) end)
+                        end
+                    end)
+                end
+            end
+
+            scanConns[category] = { add = addConn, rem = remConn }
+            return
+        end
+
+        -- Generic folder: ESP each child
+        for _, child in ipairs(f:GetChildren()) do
+            if espEnabled[category] then addESP(child, category) end
+        end
+
+        local addConn = f.ChildAdded:Connect(function(child)
+            if espEnabled[category] then
+                task.defer(function() addESP(child, category) end)
+            end
+        end)
+
+        local remConn = f.ChildRemoved:Connect(function(child)
+            removeESP(child)
+        end)
+
+        scanConns[category] = { add = addConn, rem = remConn }
+    end
+
+    if folder then
+        wireFolder(folder)
+    else
+        local watchConn
+        local function checkAndWire()
+            local f2 = getFolder(category)
+            if f2 and espEnabled[category] then
+                pcall(function() watchConn:Disconnect() end)
+                wireFolder(f2)
+            end
+        end
+        watchConn = Workspace.DescendantAdded:Connect(checkAndWire)
+        scanConns[category] = { folderWatch = watchConn }
+    end
+end
+
+local function disableCategory(category)
+    local conns = scanConns[category]
+    if conns then
+        pcall(function() if conns.add         then conns.add:Disconnect()         end end)
+        pcall(function() if conns.rem         then conns.rem:Disconnect()         end end)
+        pcall(function() if conns.folderWatch then conns.folderWatch:Disconnect() end end)
+        scanConns[category] = nil
+    end
+
+    local folder = getFolder(category)
+    if folder then
+        if category == "MysteryBox" then
+            removeESP(folder)
+        elseif category == "Players" then
+            for _, plr in ipairs(folder:GetPlayers()) do
+                if plr.Character then removeESP(plr.Character) end
+            end
+        else
+            for _, child in ipairs(folder:GetChildren()) do
+                removeESP(child)
+            end
+        end
+    end
+
+    for inst in pairs(espObjects) do
+        pcall(function()
+            if not inst.Parent then removeESP(inst) end
+        end)
+    end
+end
+
+--══════════════════════════════════════════════════════════════
+--  MODS — STATE & HELPERS
+--══════════════════════════════════════════════════════════════
+
+local modsActive  = { Powerups = false, FreezeZombies = false, KillZombies = false }
+local modsConns   = {}
+local modsCleanup = {}
+
+local function getHRP()
+    local char = player.Character or player.CharacterAdded:Wait()
+    return char:FindFirstChild("HumanoidRootPart")
+end
+
+local function teleportTo(target)
+    local char = player.Character
+    local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    local part
+    if target:IsA("BasePart") then
+        part = target
+    else
+        part = target.PrimaryPart or target:FindFirstChildWhichIsA("BasePart", true)
+    end
+    if part then
+        pcall(function() hrp.CFrame = part.CFrame * CFrame.new(0, 4, 0) end)
+    end
+end
+
+local function stopMod(key)
+    modsActive[key] = false
+    if modsConns[key] then
+        modsConns[key]:Disconnect()
+        modsConns[key] = nil
+    end
+    if modsCleanup[key] then
+        pcall(modsCleanup[key])
+        modsCleanup[key] = nil
+    end
+end
+
+local function startMod(key, loopFn, cleanupFn)
+    modsActive[key] = true
+    modsConns[key]  = RunService.Heartbeat:Connect(loopFn)
+    if cleanupFn then
+        modsCleanup[key] = cleanupFn
+    end
+end
+
+--══════════════════════════════════════════════════════════════
+--  MODS — LOOP FUNCTIONS
+--══════════════════════════════════════════════════════════════
+
+-- Powerups: drag all powerups onto the player each frame
+local function loopPowerups()
+    local hrp = getHRP()
+    if not hrp then return end
+    local ig = Workspace:FindFirstChild("Ignore")
+    local folder = ig and ig:FindFirstChild("_Powerups")
+    if not folder then return end
+    for _, child in ipairs(folder:GetChildren()) do
+        if child:IsA("BasePart") then
+            pcall(function() child.CFrame = hrp.CFrame end)
+        elseif child:IsA("Model") then
+            local root = child.PrimaryPart or child:FindFirstChildWhichIsA("BasePart")
+            if root then pcall(function() root.CFrame = hrp.CFrame end) end
+        end
+    end
+end
+
+-- Freeze Zombies: anchor all zombie parts every frame
+local function loopFreezeZombies()
+    local ig = Workspace:FindFirstChild("Ignore")
+    local folder = ig and ig:FindFirstChild("Zombies")
+    if not folder then return end
+    for _, zombie in ipairs(folder:GetChildren()) do
+        if zombie:IsA("Model") then
+            for _, part in ipairs(zombie:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    pcall(function() part.Anchored = true end)
+                end
+            end
+        end
+    end
+end
+
+-- Freeze Zombies cleanup: unanchor everything on disable
+local function cleanupFreezeZombies()
+    local ig = Workspace:FindFirstChild("Ignore")
+    local folder = ig and ig:FindFirstChild("Zombies")
+    if not folder then return end
+    for _, zombie in ipairs(folder:GetChildren()) do
+        if zombie:IsA("Model") then
+            for _, part in ipairs(zombie:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    pcall(function() part.Anchored = false end)
+                end
+            end
+        end
+    end
+end
+
+-- Kill Zombies: CFrame every zombie head 5 studs along mouse ray, non-collidable
+local killZombieData = {}  -- [zombie] = { head, anchoredParts, origCollide }
+
+local function loopKillZombies()
+    local char = player.Character
+    local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    local unitRay   = mouse.UnitRay
+    local targetPos = unitRay.Origin + unitRay.Direction * 10
+
+    local ig = Workspace:FindFirstChild("Ignore")
+    local folder = ig and ig:FindFirstChild("Zombies")
+    if not folder then return end
+
+    for _, zombie in ipairs(folder:GetChildren()) do
+        if zombie:IsA("Model") then
+            if not killZombieData[zombie] then
+                local head = zombie:FindFirstChild("Head")
+                if not (head and head:IsA("BasePart")) then continue end
+
+                local anchored = {}
+                for _, part in ipairs(zombie:GetDescendants()) do
+                    if part:IsA("BasePart") and part ~= head then
+                        local was = part.Anchored
+                        pcall(function() part.Anchored = true end)
+                        table.insert(anchored, { part = part, was = was })
+                    end
+                end
+
+                local origCollide = head.CanCollide
+                pcall(function()
+                    head.CanCollide = false
+                    head.Anchored   = true
+                end)
+
+                killZombieData[zombie] = {
+                    head          = head,
+                    anchoredParts = anchored,
+                    origCollide   = origCollide,
+                }
+            end
+
+            local data = killZombieData[zombie]
+            if data and data.head and data.head.Parent then
+                pcall(function()
+                    data.head.CFrame     = CFrame.new(targetPos)
+                    data.head.CanCollide = false
+                end)
+            else
+                killZombieData[zombie] = nil
+            end
+        end
+    end
+end
+
+local function cleanupKillZombies()
+    for zombie, data in pairs(killZombieData) do
+        if data.head and data.head.Parent then
+            pcall(function()
+                data.head.CanCollide = data.origCollide
+                data.head.Anchored   = false
+            end)
+        end
+        for _, entry in ipairs(data.anchoredParts) do
+            if entry.part and entry.part.Parent then
+                pcall(function() entry.part.Anchored = entry.was end)
+            end
+        end
+    end
+    killZombieData = {}
+end
+
+--══════════════════════════════════════════════════════════════
+--  PAGE: ESP
+--══════════════════════════════════════════════════════════════
+
+local EspPage    = Window:CreatePage("ESP")
+local EspSection = EspPage:CreateSection("ESP Toggles")
+
+for _, cat in ipairs(CATEGORIES) do
+    local t = EspSection:CreateToggle(cat.label, { Toggled = false }, function(val)
+        espEnabled[cat.key] = val
+        if val then
+            enableCategory(cat.key)
+        else
+            disableCategory(cat.key)
+        end
+    end)
+end
+
+--══════════════════════════════════════════════════════════════
+--  PAGE: MODS
+--══════════════════════════════════════════════════════════════
+
+local ModsPage = Window:CreatePage("Mods")
+
+-- Powerups
+local PowerSection = ModsPage:CreateSection("Powerups")
+
+local powerupsToggle = PowerSection:CreateToggle("Powerups", { Toggled = false }, function(val)
+    if val then
+        startMod("Powerups", loopPowerups, nil)
+        notify("Powerups ON")
+    else
+        stopMod("Powerups")
+        notify("Powerups OFF")
+    end
+end)
+registerFunctionalToggle(powerupsToggle, false)
+
+PowerSection:CreateDivider()
+
+-- Zombies
+local ZombieSection = ModsPage:CreateSection("Zombies")
+
+local freezeToggle = ZombieSection:CreateToggle("Freeze Zombies", { Toggled = false }, function(val)
+    if val then
+        startMod("FreezeZombies", loopFreezeZombies, cleanupFreezeZombies)
+        notify("Freeze Zombies ON")
+    else
+        stopMod("FreezeZombies")
+        notify("Freeze Zombies OFF")
+    end
+end)
+registerFunctionalToggle(freezeToggle, false)
+
+local killToggle = ZombieSection:CreateToggle("Kill Zombies (heads to cursor)", { Toggled = false }, function(val)
+    if val then
+        startMod("KillZombies", loopKillZombies, cleanupKillZombies)
+        notify("Kill Zombies ON")
+    else
+        stopMod("KillZombies")
+        notify("Kill Zombies OFF")
+    end
+end)
+registerFunctionalToggle(killToggle, false)
+
+--══════════════════════════════════════════════════════════════
+--  PAGE: TELEPORTS
+--══════════════════════════════════════════════════════════════
+
+local TpPage = Window:CreatePage("Teleports")
+
+-- Mystery Box
+do
+    local section = TpPage:CreateSection("Mystery Box")
+    section:CreateLabel("Teleport to the Mystery Box location")
+    section:CreateButton("Teleport to Mystery Box", function()
+        local mc = Workspace:FindFirstChild("_MapComponents")
+        local mb = mc and mc:FindFirstChild("MysteryBox")
+        if mb then
+            teleportTo(mb)
+            notify("Teleported to Mystery Box!")
+        else
+            notify("Mystery Box not found!")
+        end
+    end)
+    section:CreateDivider()
+end
+
+-- Helper: build a TP section with dropdown + refresh + TP button
+local function buildTpSection(sectionName, description, folderFn, targetFn)
+    local section = TpPage:CreateSection(sectionName)
+    section:CreateLabel(description)
+
+    local function getNames()
+        local folder = folderFn()
+        local names  = {}
+        if folder then
+            for _, child in ipairs(folder:GetChildren()) do
+                table.insert(names, child.Name)
+            end
+        end
+        return names, folder
+    end
+
+    local names, folder = getNames()
+    local selected = names[1]
+
+    local dropdown = section:CreateDropdown("Select", {
+        List    = names,
+        Default = names[1] or "None",
+    }, function(val)
+        selected = val
+    end)
+
+    section:CreateButton("Teleport", function()
+        local f = folderFn()
+        if not f then notify(sectionName .. " folder not found!") return end
+        if not selected or selected == "None" then notify("Nothing selected!") return end
+
+        local target = f:FindFirstChild(selected)
+        if not target then notify(selected .. " not found!") return end
+
+        local tp = targetFn and targetFn(target) or target
+        teleportTo(tp)
+        notify("Teleported to " .. selected)
+    end)
+
+    section:CreateButton("Refresh List", function()
+        local newNames = getNames()
+        dropdown:Refresh(newNames)
+        selected = newNames[1]
+        notify(sectionName .. " list refreshed (" .. #newNames .. " found)")
+    end)
+
+    section:CreateDivider()
+end
+
+buildTpSection("Parts",         "Select a part and teleport to it",              function() return Workspace:FindFirstChild("_Parts")        end, nil)
+buildTpSection("Perk Machines", "Select a perk machine and teleport to it",      function() return Workspace:FindFirstChild("_PerkMachines") end, function(model)
+    return model:FindFirstChild("PurchasePerk", true) or model
+end)
+buildTpSection("Wall Buys",     "Select a wall buy weapon and teleport to it",   function() return Workspace:FindFirstChild("_WallBuys")     end, nil)
+
+-- Players section (special case — uses Players service)
+do
+    local section = TpPage:CreateSection("Players")
+    section:CreateLabel("Select a player and teleport to them")
+
+    local function getPlayerNames()
+        local names = {}
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= player then
+                table.insert(names, plr.Name)
+            end
+        end
+        return names
+    end
+
+    local names    = getPlayerNames()
+    local selected = names[1]
+
+    local dropdown = section:CreateDropdown("Select Player", {
+        List    = names,
+        Default = names[1] or "None",
+    }, function(val)
+        selected = val
+    end)
+
+    section:CreateButton("Teleport", function()
+        if not selected or selected == "None" then notify("No player selected!") return end
+        local target = Players:FindFirstChild(selected)
+        if not target or not target.Character then
+            notify(selected .. " not found or has no character!")
+            return
+        end
+        teleportTo(target.Character)
+        notify("Teleported to " .. selected)
+    end)
+
+    section:CreateButton("Refresh List", function()
+        local newNames = getPlayerNames()
+        dropdown:Refresh(newNames)
+        selected = newNames[1]
+        notify("Player list refreshed (" .. #newNames .. " found)")
+    end)
+
+    section:CreateDivider()
+end
+
+--══════════════════════════════════════════════════════════════
+--  PAGE: SERVER
+--══════════════════════════════════════════════════════════════
+
+local ServerPage    = Window:CreatePage("Server")
+local ServerSection = ServerPage:CreateSection("Server Tools")
+
+ServerSection:CreateTextbox("Chat Message", "Type message...", function(text)
+    if text and #text > 0 then
+        notify("Message: " .. text)
+    end
+end)
+
+ServerSection:CreateButton("Copy Server ID", function()
+    if setclipboard then
+        setclipboard(game.JobId)
+        notify("Server ID copied!")
+    else
+        notify("Clipboard not supported")
+    end
+end)
+
+ServerSection:CreateButton("Rejoin Server", function()
+    notify("Rejoining...")
+    if queueteleport then
+        pcall(function()
+            queueteleport('loadstring(game:HttpGet("' .. SCRIPT_URL .. '"))()')
+        end)
+    end
+    task.wait(0.3)
+    pcall(function()
+        TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId)
+    end)
+end)
+
+ServerSection:CreateButton("Server Hop", function()
+    notify("Finding new server...")
+    if queueteleport then
+        pcall(function()
+            queueteleport('loadstring(game:HttpGet("' .. SCRIPT_URL .. '"))()')
+        end)
+    end
+    local ok, err = pcall(function()
+        local servers = HttpService:JSONDecode(
+            game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100")
+        )
+        if servers and servers.data then
+            for _, server in pairs(servers.data) do
+                if server.id ~= game.JobId and server.playing < server.maxPlayers then
+                    notify("Joining new server...")
+                    task.wait(0.5)
+                    TeleportService:TeleportToPlaceInstance(game.PlaceId, server.id)
+                    return
+                end
+            end
+            notify("No other servers available")
+        else
+            notify("Could not fetch servers")
+        end
+    end)
+    if not ok then notify("Server hop failed!") end
+end)
+
+ServerSection:CreateButton("Reset Character", function()
+    if player.Character and player.Character:FindFirstChild("Humanoid") then
+        player.Character.Humanoid.Health = 0
+    end
+    notify("Character reset!")
+end)
+
+ServerSection:CreateDivider()
+
+-- Server Saver
+local FILE_NAME = "SavedServers_MichaelsZombies.json"
+
+local function saveServerData(data)
+    if writefile then writefile(FILE_NAME, HttpService:JSONEncode(data)) end
+end
+
+local function loadServerData()
+    if isfile and isfile(FILE_NAME) then
+        local ok, result = pcall(function()
+            return HttpService:JSONDecode(readfile(FILE_NAME))
+        end)
+        if ok then return result end
+    end
+    return {}
+end
+
+local serverMap    = {}
+local selectedSave = nil
+
+local function buildServerList()
+    local data  = loadServerData()
+    local names = {}
+    serverMap   = {}
+    for i, v in ipairs(data) do
+        local display = "#" .. i .. " | " .. v.Time
+        table.insert(names, display)
+        serverMap[display] = i
+    end
+    return data, names
+end
+
+local serverData, initNames = buildServerList()
+
+local savedDropdown = ServerSection:CreateDropdown("Saved Servers", {
+    List    = initNames,
+    Default = initNames[1] or "None",
+}, function(val)
+    selectedSave = val
+end)
+selectedSave = initNames[1]
+
+ServerSection:CreateButton("Save Current Server", function()
+    local data  = loadServerData()
+    local entry = { JobId = game.JobId, PlaceId = game.PlaceId, Time = os.date("%H:%M | %d %b") }
+    table.insert(data, 1, entry)
+    if #data > 20 then table.remove(data, 21) end
+    saveServerData(data)
+    local _, names = buildServerList()
+    savedDropdown:Refresh(names)
+    selectedSave = names[1]
+    notify("Server saved!")
+end)
+
+ServerSection:CreateButton("Join Saved Server", function()
+    if not selectedSave or selectedSave == "None" then
+        notify("No server selected!")
+        return
+    end
+    local index = serverMap[selectedSave]
+    if not index then notify("Server not found! Refresh list.") return end
+    local data   = loadServerData()
+    local server = data[index]
+    if not server then notify("Server data missing!") return end
+    if queueteleport then
+        pcall(function()
+            queueteleport('loadstring(game:HttpGet("' .. SCRIPT_URL .. '"))()')
+        end)
+    end
+    notify("Joining: " .. server.Time)
+    task.wait(0.3)
+    TeleportService:TeleportToPlaceInstance(server.PlaceId, server.JobId, player)
+end)
+
+ServerSection:CreateButton("Refresh Server List", function()
+    local data, names = buildServerList()
+    savedDropdown:Refresh(names)
+    if #names > 0 then selectedSave = names[1] end
+    notify("Found " .. #data .. " saved servers")
+end)
+
+ServerSection:CreateButton("Clear Server History", function()
+    saveServerData({})
+    serverMap    = {}
+    selectedSave = nil
+    savedDropdown:Refresh({})
+    notify("Server history cleared!")
+end)
+
+--══════════════════════════════════════════════════════════════
+--  PAGE: MISC
+--══════════════════════════════════════════════════════════════
+
+local MiscPage    = Window:CreatePage("Misc")
+local UtilSection = MiscPage:CreateSection("Utilities")
+
+local antiAfkToggle = UtilSection:CreateToggle("Anti-AFK", { Toggled = true }, function(val)
+    notify("Anti-AFK: " .. (val and "ON" or "OFF"))
+end)
+registerFunctionalToggle(antiAfkToggle, true)
+
+player.Idled:Connect(function()
+    VirtualUser:CaptureController()
+    VirtualUser:ClickButton2(Vector2.new())
+end)
+
+UtilSection:CreateButton("Copy Discord", function()
+    if setclipboard then
+        setclipboard("spookyie")
+        notify("Discord copied: spookyie")
+    else
+        notify("Discord: spookyie")
+    end
+end)
+
+UtilSection:CreateDivider()
+
+local InfoSection = MiscPage:CreateSection("Information")
+InfoSection:CreateLabel("Script: Michael's Zombies Hub V1.0")
+InfoSection:CreateLabel("Discord: spookyie")
+InfoSection:CreateDivider()
+
+InfoSection:CreateButton("Credits", function()
+    notify("Made by Spooky // Discord: spookyie")
+end)
+
+InfoSection:CreateButton("Destroy GUI", function()
+    -- Stop all mods cleanly
+    stopMod("Powerups")
+    stopMod("FreezeZombies")
+    stopMod("KillZombies")
+    -- Disable all ESP
+    for _, cat in ipairs(CATEGORIES) do
+        espEnabled[cat.key] = false
+        pcall(function() disableCategory(cat.key) end)
+    end
+    pcall(function() Window:SaveConfig("Default") end)
+    notify("Goodbye!")
+    task.wait(1)
+    Window:Destroy()
+end)
+
+--══════════════════════════════════════════════════════════════
+--  PAGE: CONFIG
+--══════════════════════════════════════════════════════════════
+
+local ConfigPage    = Window:CreatePage("Config")
+local ConfigSection = ConfigPage:CreateSection("Save & Load")
+
+ConfigSection:CreateLabel("Save your settings across sessions")
+ConfigSection:CreateDivider()
+
+local currentProfile = "Default"
+
+ConfigSection:CreateTextbox("Profile Name", "Default", function(text)
+    if text and #text > 0 then
+        currentProfile = text
+    end
+end)
+
+ConfigSection:CreateDivider()
+
+ConfigSection:CreateButton("Save Config", function()
+    local ok = Window:SaveConfig(currentProfile)
+    notify(ok and ("Saved: " .. currentProfile) or "Save failed!")
+end)
+
+ConfigSection:CreateButton("Load Config", function()
+    local ok = Window:LoadConfig(currentProfile)
+    if ok then
+        task.wait(0.1)
+        resetFunctionalToggles()
+        notify("Loaded: " .. currentProfile)
+    else
+        notify("No config found: " .. currentProfile)
+    end
+end)
+
+ConfigSection:CreateButton("Delete Config", function()
+    Window:DeleteConfig(currentProfile)
+    notify("Deleted: " .. currentProfile)
+end)
+
+ConfigSection:CreateDivider()
+
+ConfigSection:CreateButton("List Profiles", function()
+    local profiles = Window:GetProfiles()
+    if #profiles > 0 then
+        notify(table.concat(profiles, ", "))
+    else
+        notify("No saved profiles")
+    end
+end)
+
+ConfigSection:CreateButton("Export to Clipboard", function()
+    local ok = Window:ExportConfig(currentProfile)
+    notify(ok and "Copied to clipboard!" or "Export failed")
+end)
+
+ConfigSection:CreateDivider()
+ConfigSection:CreateLabel(_hasFS and "Saves to: SpookyHub_Configs/" or "No file system — session only!")
+
+--══════════════════════════════════════════════════════════════
+--  INITIALIZATION
+--══════════════════════════════════════════════════════════════
+
+task.wait(0.5)
+
+local loaded = Window:LoadConfig("Default")
+if loaded then
+    print("[Hub] Config loaded!")
+else
+    print("[Hub] No saved config — saving defaults")
+    Window:SaveConfig("Default")
+end
+
+resetFunctionalToggles()
+
+game:BindToClose(function()
+    -- Clean up all mods on close
+    stopMod("Powerups")
+    stopMod("FreezeZombies")
+    stopMod("KillZombies")
+    pcall(function() Window:SaveConfig("Default") end)
+end)
+
+print("[Hub] Michael's Zombies Hub ready!")
