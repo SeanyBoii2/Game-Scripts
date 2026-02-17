@@ -42,7 +42,7 @@ end
 
 local Window
 pcall(function()
-    Window = Library:CreateWindow("MICHAELS'S ZOMBIES", "SPOOKALICIOUS V4")
+    Window = Library:CreateWindow("SPOOKALICIOUS V4", "MICHAELS'S ZOMBIES")
 end)
 
 --══════════════════════════════════════════════════════════════
